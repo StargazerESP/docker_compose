@@ -1,0 +1,269 @@
+version: '3.4'
+services:
+#  batrium_poller:  
+#    network_mode: host
+#    image: "batriumpoller:1.0"
+#    working_dir: /home/node/app
+#    command: "node index.js"
+#    ports:
+#      - "18542:18542/udp"
+
+  chronograf:
+    # Full tag list: https://hub.docker.com/r/library/chronograf/tags/
+    image: chronograf:1.8.2
+    volumes:
+      # Mount for chronograf database
+      - nfs-chronograf-data-vol:/var/lib/chronograf/
+    ports:
+      # The WebUI for Chronograf is served on port 8888
+      - "8888:8888"
+    depends_on:
+      - kapacitor
+      - influxdb
+      - telegraf
+     
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - nfs-grafana-data-vol:/var/lib/grafana
+    depends_on:
+      - influxdb
+
+  influxdb:
+    # Full tag list: https://hub.docker.com/r/library/influxdb/tags/
+    image: influxdb:latest
+    volumes:
+      # Mount for influxdb data directory
+      - local-influxdb-data-vol:/var/lib/influxdb
+      # Mount for influxdb configuration
+      - local-influxdb-config-vol:/etc/influxdb/
+    ports:
+      # The API for InfluxDB is served on port 8086
+      - "8086:8086"
+      - "8082:8082"
+      # UDP Port
+      - "8089:8089"
+
+  kapacitor:
+    # Full tag list: https://hub.docker.com/r/library/kapacitor/tags/
+    image: kapacitor:latest
+    volumes:
+      # Mount for kapacitor data directory
+      - nfs-kapacitor-data-vol:/var/lib/kapacitor
+      # Mount for kapacitor configuration
+      - nfs-kapacitor-config-vol:/etc/kapacitor/
+    ports:
+      # The API for Kapacitor is served on port 9092
+      - "9092:9092"
+
+  node-red:
+    image: nodered/node-red:1.0.6
+    ports:
+      - "1880:1880"
+    volumes:
+      - nfs-nodered-data-vol:/data
+    depends_on:
+      - influxdb
+      
+  mosquitto:
+    image: leojrfs/mosquitto-arm:latest
+    volumes:
+      - nfs-mosquitto-data-vol:/mosquitto/data
+      - nfs-mosquitto-log-vol:/mosquitto/log
+      - nfs-mosquitto-config-vol:/mosquitto/config
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+
+  php:
+    image: stargazer_esp-php71-apache-zip-base:0.7
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      #- nfs-php-arm-vol:/usr/lib/arm-linux-gnueabihf
+      #- nfs-php-config-vol:/usr/local/etc/php
+      #- nfs-php-extensions-vol:/usr/src/php/ext
+      #- nfs-php-lib_extensions-vol:/usr/local/lib/php/extensions
+      - nfs-php-data-vol:/var/www/html
+      #- nfs-php-include-vol:/usr/include
+
+  powerwall:   
+    image: "node:8"
+    user: "node"
+    working_dir: /home/node/app
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - nfs-powerwall-data-vol:/home/node/app
+    ports:
+      - "3333:3333"
+    build: .
+    command: "node project.js"
+    depends_on:
+      - influxdb
+      - mosquitto
+  
+
+      
+#  telegraf:
+    # Full tag list: https://hub.docker.com/r/library/telegraf/tags/
+#    image: telegraf:latest
+#    volumes:
+      # Mount for telegraf configuration
+#      - nfs-telegraf-config-vol:/etc/telegraf/
+      # Mount for Docker API access
+#      - /var/run/docker.sock:/var/run/docker.sock
+#    depends_on:
+#      - influxdb
+
+volumes:
+  nfs-batrium_poller-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/nodejs/batrium_poller/data"
+      
+  nfs-chronograf-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/chronograf/data"
+
+  nfs-grafana-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/grafana/data"
+
+  local-influxdb-config-vol:
+    name: local-influxdb-config-vol
+    
+  local-influxdb-data-vol:
+    name: local-influxdb-data-vol
+
+#  nfs-influxdb-config-vol:
+#    driver: local
+#    driver_opts:
+#      type: "nfs"
+#      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+#      device: ":/mnt/TheGrid/Docker/stargazerESP/influxdb/config"
+
+#  nfs-influxdb-data-vol:
+#    driver: local
+#    driver_opts:
+#      type: "nfs"
+#      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+#      device: ":/mnt/TheGrid/Docker/stargazerESP/influxdb/data"
+
+  nfs-kapacitor-config-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/kapacitor/config"
+      
+  nfs-kapacitor-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/kapacitor/data"
+
+  nfs-mosquitto-config-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/mosquitto/config"
+      
+  nfs-mosquitto-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/mosquitto/data"
+      
+  nfs-mosquitto-log-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/mosquitto/log"
+
+  nfs-nodered-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/node_red/data"
+      
+  nfs-php-arm-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/php/arm"
+
+  nfs-php-config-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/php/config"
+      
+  nfs-php-extensions-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/php/extensions"
+      
+  nfs-php-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/php/data"
+ 
+  nfs-php-include-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/php/include"
+      
+  nfs-php-lib_extensions-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/php/lib_extensions"
+
+  nfs-powerwall-data-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/nodejs/powerwall/data"
+      
+  nfs-powerwall-modules-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/nodejs/powerwall/modules"
+      
+
+  nfs-telegraf-config-vol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
+      device: ":/mnt/TheGrid/Docker/stargazerESP/telegraf/config"
+
