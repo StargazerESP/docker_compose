@@ -1,113 +1,265 @@
 version: '3.4'
 services:
-#  batrium_poller:  
-#    network_mode: host
-#    image: "batriumpoller:1.0"
-#    working_dir: /home/node/app
-#    command: "node index.js"
-#    ports:
-#      - "18542:18542/udp"
 
   chronograf:
     # Full tag list: https://hub.docker.com/r/library/chronograf/tags/
     image: chronograf:1.8.2
     volumes:
       # Mount for chronograf database
-      - nfs-chronograf-data-vol:/var/lib/chronograf/
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/chronograf/data
+        target: /var/lib/chronograf
     ports:
       # The WebUI for Chronograf is served on port 8888
-      - "8888:8888"
+      - "8888"
     depends_on:
       - kapacitor
       - influxdb
-      - telegraf
-     
+    networks:
+      default:
+      backend:
+    deploy:
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.chronograf.entrypoints=chronograf"
+        - "traefik.http.routers.chronograf.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`)"
+        - "traefik.http.services.chronograf.loadbalancer.server.port=8888"
+
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "3000:3000"
+      - "3000"
     volumes:
-      - nfs-grafana-data-vol:/var/lib/grafana
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/grafana/data
+        target: /var/lib/grafana
     depends_on:
       - influxdb
+    networks:
+      default:
+      backend:
+    deploy:
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.grafana.entrypoints=grafana"
+        - "traefik.http.routers.grafana.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`)"
+        - "traefik.http.services.grafana.loadbalancer.server.port=3000"     
 
   influxdb:
-    # Full tag list: https://hub.docker.com/r/library/influxdb/tags/
     image: influxdb:latest
     volumes:
-      # Mount for influxdb data directory
-      - local-influxdb-data-vol:/var/lib/influxdb
+      - type: bind
+        source: /mnt/nvme/stargazerESP/influxdb/data
+        target: /var/lib/influxdb
       # Mount for influxdb configuration
-      - local-influxdb-config-vol:/etc/influxdb/
+      - type: bind
+        source: /mnt/nvme/stargazerESP/influxdb/config
+        target: /etc/influxdb
     ports:
-      # The API for InfluxDB is served on port 8086
-      - "8086:8086"
-      - "8082:8082"
+      # The web destination for InfluxDB is served on port 8086
+      - "8086"
       # UDP Port
-      - "8089:8089"
-
+      - "8089/udp"
+    networks:
+      default:
+      backend:
+    deploy:
+      placement:
+        constraints:
+          - node.labels.nvme == False
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.influx-http.entrypoints=influx-http"
+        - "traefik.http.routers.influx-http.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`, `influxdb`)"
+        - "traefik.http.services.influx-http.loadbalancer.server.port=8086"
+        - "traefik.udp.services.influx-udp.loadbalancer.server.port=8089"
+        - "traefik.udp.routers.influx-udp.entrypoints=influx-udp"
+        - "traefik.udp.routers.influx-udp.service=influx-udp"
+        
+#  influxdb-relay:
+#    image: docker.io/bitnami/influxdb-relay:0-scratch
+#    command: /influxdb-relay --config /relay.toml
+#    volumes:
+#    - type: bind
+#      source: /mnt/gfs-docker/StargazerESP/influxdb-relay/relay.toml
+#      target: /relay.toml:ro
+#    ports:
+#      - "9096:9096"
+#      - "9097:9097"
+      
   kapacitor:
     # Full tag list: https://hub.docker.com/r/library/kapacitor/tags/
     image: kapacitor:latest
     volumes:
-      # Mount for kapacitor data directory
-      - nfs-kapacitor-data-vol:/var/lib/kapacitor
-      # Mount for kapacitor configuration
-      - nfs-kapacitor-config-vol:/etc/kapacitor/
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/kapacitor/data
+        target: /var/lib/kapacitor
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/kapacitor/config
+        target: /etc/kapacitor
     ports:
       # The API for Kapacitor is served on port 9092
-      - "9092:9092"
-
-  node-red:
-    image: nodered/node-red:1.0.6
-    ports:
-      - "1880:1880"
-    volumes:
-      - nfs-nodered-data-vol:/data
-    depends_on:
-      - influxdb
-      
+      - "9092"
+    networks:
+      default:
+      backend:
+    deploy:
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.kapacitor.entrypoints=kapacitor"
+        - "traefik.http.routers.kapacitor.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`)"
+        - "traefik.http.services.kapacitor.loadbalancer.server.port=9092"
+     
   mosquitto:
     image: leojrfs/mosquitto-arm:latest
     volumes:
-      - nfs-mosquitto-data-vol:/mosquitto/data
-      - nfs-mosquitto-log-vol:/mosquitto/log
-      - nfs-mosquitto-config-vol:/mosquitto/config
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/mosquitto/data
+        target: /mosquitto/data
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/mosquitto/log
+        target: /mosquitto/log
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/mosquitto/config
+        target: /etc/mosquitto
     ports:
-      - "1883:1883"
-      - "9001:9001"
-
+      - "1883"
+#      - "9001:9001"
+    networks:
+      default:
+      backend:
+    deploy:
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.tcp.routers.mosquitto.entrypoints=mosquitto"
+        - "traefik.tcp.routers.mosquitto.rule=HostSNI(`*`)"
+        - "traefik.tcp.services.mosquitto.loadbalancer.server.port=1883"
+         
+  node-red:
+    image: nodered/node-red:1.0.6
+    ports:
+      - "1880"
+    volumes:
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/node_red/data
+        target: /data
+    depends_on:
+      - influxdb
+    networks:
+      default:
+      backend:
+    deploy:
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.nodered.entrypoints=nodered"
+        - "traefik.http.routers.nodered.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`)"
+        - "traefik.http.services.nodered.loadbalancer.server.port=1880"
+          
   php:
     image: stargazer_esp-php71-apache-zip-base:0.7
     ports:
-      - "80:80"
-      - "443:443"
+      - "80"
     volumes:
-      #- nfs-php-arm-vol:/usr/lib/arm-linux-gnueabihf
-      #- nfs-php-config-vol:/usr/local/etc/php
-      #- nfs-php-extensions-vol:/usr/src/php/ext
-      #- nfs-php-lib_extensions-vol:/usr/local/lib/php/extensions
-      - nfs-php-data-vol:/var/www/html
-      #- nfs-php-include-vol:/usr/include
-
-  powerwall:   
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/php/data
+        target: /var/www/html
+    networks:
+      backend:
+    deploy:
+      mode: replicated
+      replicas: 2
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.php.entrypoints=http"
+        - "traefik.http.routers.php.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`)"
+        - "traefik.http.services.php.loadbalancer.server.port=80"
+        
+  powerflow:   
     image: "node:8"
     user: "node"
     working_dir: /home/node/app
     environment:
       - NODE_ENV=production
     volumes:
-      - nfs-powerwall-data-vol:/home/node/app
+      - type: bind
+        source: /mnt/gfs-docker/stargazerESP/powerflow/data
+        target: /home/node/app
     ports:
-      - "3333:3333"
+      - "3333"
     build: .
     command: "node project.js"
     depends_on:
       - influxdb
       - mosquitto
-  
-
-      
+    networks:
+      backend:  
+    deploy:
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.powerflow.entrypoints=powerflow"
+        - "traefik.http.routers.powerflow.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`)"
+        - "traefik.http.services.powerflow.loadbalancer.server.port=3333"
+     
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.2
+    # Enables the web UI and tells Traefik to listen to docker
+    command: 
+      - "--api=true"
+      - "--api.insecure=true"
+      - "--metrics.influxdb=true"
+      - "--metrics.influxdb.address=influxdb:8086"
+      - "--metrics.influxdb.protocol=http"
+      - "--metrics.influxdb.database=traefik"
+      - "--metrics.influxdb.retentionPolicy=two_hours"
+      - "--providers.docker"
+      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.constraints=Label(`com.docker.stack.namespace`,`stargazerESP_tick`)"
+      - "--entrypoints.http.address=:80"
+      - "--entrypoints.mosquitto.address=:1883"
+      - "--entrypoints.nodered.address=:1880"
+      - "--entrypoints.grafana.address=:3000"
+      - "--entrypoints.powerflow.address=:3333"
+      - "--entrypoints.traefik.address=:8080"
+      - "--entrypoints.influx-http.address=:8086"
+      - "--entrypoints.chronograf.address=:8888"
+      - "--entryPoints.influx-udp.address=:8089/udp"
+      - "--entrypoints.kapacitor.address=:9092"
+   
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      # The HTTP port
+      - "80:80"
+      # Node Red
+      - "1880:1880"
+      # Mosquitto
+      - "1883:1883"
+      # Grafana
+      - "3000:3000"
+      # powerflow port
+      - "3333:3333"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+      # Influxdb - http services
+      - "8086:8086"
+      # Influxdb - udp service
+      - "8089:8089/udp"
+      # Chronograf
+      - "8888:8888"
+      # Kapacitor"
+      - "9092:9092"    
+    networks:
+      default:
+      backend:
+    deploy:
+      labels:
+        - "traefik.docker.network=stargazerESP_tick_backend"
+        - "traefik.http.routers.traefik.rule=Host(`10.100.100.250`,`10.100.100.251`,`10.100.100.252`)"
+        - "traefik.http.routers.traefik.entrypoints=traefik"
+        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+               
 #  telegraf:
     # Full tag list: https://hub.docker.com/r/library/telegraf/tags/
 #    image: telegraf:latest
@@ -119,151 +271,8 @@ services:
 #    depends_on:
 #      - influxdb
 
-volumes:
-  nfs-batrium_poller-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/nodejs/batrium_poller/data"
-      
-  nfs-chronograf-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/chronograf/data"
-
-  nfs-grafana-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/grafana/data"
-
-  local-influxdb-config-vol:
-    name: local-influxdb-config-vol
-    
-  local-influxdb-data-vol:
-    name: local-influxdb-data-vol
-
-#  nfs-influxdb-config-vol:
-#    driver: local
-#    driver_opts:
-#      type: "nfs"
-#      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-#      device: ":/mnt/TheGrid/Docker/stargazerESP/influxdb/config"
-
-#  nfs-influxdb-data-vol:
-#    driver: local
-#    driver_opts:
-#      type: "nfs"
-#      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-#      device: ":/mnt/TheGrid/Docker/stargazerESP/influxdb/data"
-
-  nfs-kapacitor-config-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/kapacitor/config"
-      
-  nfs-kapacitor-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/kapacitor/data"
-
-  nfs-mosquitto-config-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/mosquitto/config"
-      
-  nfs-mosquitto-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/mosquitto/data"
-      
-  nfs-mosquitto-log-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/mosquitto/log"
-
-  nfs-nodered-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/node_red/data"
-      
-  nfs-php-arm-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/php/arm"
-
-  nfs-php-config-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/php/config"
-      
-  nfs-php-extensions-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/php/extensions"
-      
-  nfs-php-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/php/data"
- 
-  nfs-php-include-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/php/include"
-      
-  nfs-php-lib_extensions-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/php/lib_extensions"
-
-  nfs-powerwall-data-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/nodejs/powerwall/data"
-      
-  nfs-powerwall-modules-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/nodejs/powerwall/modules"
-      
-
-  nfs-telegraf-config-vol:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.1.3.2,rw,noatime,rsize=8192,wsize=8192,tcp,timeo=14"
-      device: ":/mnt/TheGrid/Docker/stargazerESP/telegraf/config"
-
+networks:
+  default:
+  backend:
+    driver: overlay
+  
